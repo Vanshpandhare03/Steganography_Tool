@@ -1,119 +1,235 @@
-from tkinter import *
-from tkinter import filedialog, messagebox
-from PIL import Image
+import tkinter as tk
+from tkinter import filedialog, messagebox, scrolledtext, Tk, Label, PhotoImage
+from PIL import Image, ImageTk
+import numpy as np
 
-def hide_text_in_image(image_path, message, output_path):
+# Global variable for image path
+image_path = ""
+
+def encode_data(image_path, text=None):
+    # Load the cover image
     image = Image.open(image_path)
-    encoded_image = image.copy()
-    width, height = image.size
-    idx = 0
+    image_array = np.array(image)
 
-    # Convert message to binary
-    binary_message = ''.join([format(ord(i), '08b') for i in message])
-    binary_message += '1111111111111110'  # End-of-message marker
+    binary_data = ""
 
-    # Encode the message in the image
-    for y in range(height):
-        for x in range(width):
-            pixel = list(encoded_image.getpixel((x, y)))
-            for n in range(3):  # Iterate through the R, G, B values
-                if idx < len(binary_message):
-                    pixel[n] = pixel[n] & ~1 | int(binary_message[idx])
-                    idx += 1
-            encoded_image.putpixel((x, y), tuple(pixel))
-            if idx >= len(binary_message):
-                break
-        if idx >= len(binary_message):
+    # Encode text
+    if text:
+        binary_text = ''.join([format(ord(char), '08b') for char in text])
+        binary_data += binary_text + '1111111111111110'  # Delimiter to indicate the end of text
+
+    # Get the dimensions of the image
+    rows, cols, _ = image_array.shape
+
+    # Encoding the data into the image
+    binary_index = 0
+    for i in range(rows):
+        for j in range(cols):
+            pixel = image_array[i][j]
+            for k in range(3):  # Loop through RGB
+                if binary_index < len(binary_data):
+                    pixel[k] = int(format(pixel[k], '08b')[:-1] + binary_data[binary_index], 2)
+                    binary_index += 1
+                else:
+                    break
+        if binary_index >= len(binary_data):
             break
 
-    encoded_image.save(output_path)
-    messagebox.showinfo("Success", f"Text successfully hidden in {output_path}")
+    # Save the modified image
+    encoded_image = Image.fromarray(image_array)
+    return encoded_image
 
-def extract_text_from_image(image_path):
+def decode_data(image_path):
+    # Load image
     image = Image.open(image_path)
-    width, height = image.size
-    binary_message = ''
-    
-    for y in range(height):
-        for x in range(width):
-            pixel = list(image.getpixel((x, y)))
-            for n in range(3):  # Iterate through the R, G, B values
-                binary_message += str(pixel[n] & 1)
+    image_array = np.array(image)
 
-    # Split by 8 bits and convert back to characters
-    message = ''.join([chr(int(binary_message[i:i + 8], 2)) for i in range(0, len(binary_message), 8)])
-    end_of_message = message.find('þ')  # End-of-message marker
-    return message[:end_of_message]
+    binary_data = ""
 
-def open_file():
-    file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.png *.jpg *.jpeg")])
-    return file_path
+    # Get the dimensions of the image
+    rows, cols, _ = image_array.shape
 
-def open_text_file():
-    file_path = filedialog.askopenfilename(filetypes=[("Text Files", "*.txt")])
-    return file_path
+    # Extracting the LSBs to retrieve the hidden data
+    for i in range(rows):
+        for j in range(cols):
+            pixel = image_array[i][j]
+            for k in range(3):  # Loop through RGB
+                binary_data += format(pixel[k], '08b')[-1]
 
-def hide_text():
-    image_path = open_file()
-    message = text_input.get("1.0", END)
-    output_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png")])
-    if image_path and message and output_path:
-        hide_text_in_image(image_path, message, output_path)
+    # Separate text data
+    data_parts = binary_data.split('1111111111111110', 1)
+    text_data = data_parts[0]
 
-def hide_text_from_file():
-    image_path = open_file()
-    file_path = open_text_file()
-    if file_path:
-        with open(file_path, 'r') as file:
-            message = file.read()
-    output_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png")])
-    if image_path and message and output_path:
-        hide_text_in_image(image_path, message, output_path)
+    # Decode text
+    decoded_text = ""
+    for i in range(0, len(text_data), 8):
+        decoded_text += chr(int(text_data[i:i + 8], 2))
 
-def extract_text():
-    image_path = open_file()
+    return decoded_text
+
+def select_image():
+    global image_path
+    image_path = filedialog.askopenfilename(title="Select Image", filetypes=[("Image Files", "*.png;*.jpg;*.jpeg;*.bmp")])
     if image_path:
-        extracted_message = extract_text_from_image(image_path)
-        messagebox.showinfo("Extracted Text", extracted_message)
+        img = Image.open(image_path)
+        img.thumbnail((250, 250))
+        img = ImageTk.PhotoImage(img)
+        image_label.config(image=img)
+        image_label.image = img
 
-def open_encode_menu():
-    clear_window()
-    # Text Input
-    Label(root, text="Enter text to hide:").pack(pady=5)
-    global text_input
-    text_input = Text(root, height=5, width=40)
-    text_input.pack(pady=5)
+def encode():
+    if not image_path:
+        output_label.config(text="Error: Please select an image first.", fg="red")
+        return
 
-    # Buttons
-    Button(root, text="Hide Text in Image", command=hide_text).pack(pady=5)
-    Button(root, text="Hide Text File in Image", command=hide_text_from_file).pack(pady=5)
-    Button(root, text="Back to Main Menu", command=show_main_menu).pack(pady=5)
+    text = text_entry.get()
+    if not text:
+        output_label.config(text="Error: Please enter text to encode.", fg="red")
+        return
 
-def open_decode_menu():
-    clear_window()
-    # Decode Menu
-    Label(root, text="Extract text from image:").pack(pady=5)
-    Button(root, text="Choose Image and Extract Text", command=extract_text).pack(pady=5)
-    Button(root, text="Back to Main Menu", command=show_main_menu).pack(pady=5)
+    encoded_image = encode_data(image_path, text=text)
+    save_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png")])
+    if save_path:
+        encoded_image.save(save_path)
+        output_label.config(text="Success: Data encoded and saved successfully!", fg="green")
+
+def encode_text_file():
+    if not image_path:
+        output_label.config(text="Error: Please select an image first.", fg="red")
+        return
+
+    file_path = filedialog.askopenfilename(title="Select Text File", filetypes=[("Text Files", "*.txt")])
+    if not file_path:
+        output_label.config(text="Error: Please select a text file.", fg="red")
+        return
+
+    with open(file_path, 'r') as file:
+        text = file.read()
+
+    encoded_image = encode_data(image_path, text=text)
+    save_path = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png")])
+    if save_path:
+        encoded_image.save(save_path)
+        output_label.config(text="Success: Text file encoded and saved successfully!", fg="green")
+
+def save_decoded_text(decoded_text):
+    save_path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text Files", "*.txt")])
+    if save_path:
+        with open(save_path, 'w') as file:
+            file.write(decoded_text)
+        messagebox.showinfo("Save Successful", "Text saved as a file successfully!")
+
+def decode():
+    if not image_path:
+        output_label.config(text="Error: Please select an image first.", fg="red")
+        return
+
+    decoded_text = decode_data(image_path)
+
+    if decoded_text:
+        output_label.config(text="Decoded Text:", fg="green")
+        decoded_text_box.config(state=tk.NORMAL)
+        decoded_text_box.delete(1.0, tk.END)
+        decoded_text_box.insert(tk.END, decoded_text)
+        decoded_text_box.config(state=tk.DISABLED)
+
+        save_button = tk.Button(root, text="Save Decoded Text", command=lambda: save_decoded_text(decoded_text))
+        save_button.pack(pady=5)
+    else:
+        output_label.config(text="No hidden text found in the image.", fg="orange")
 
 def show_main_menu():
-    clear_window()
-    Label(root, text="Steganography Tool", font=("Helvetica", 16)).pack(pady=20)
-
-    # Main Menu Buttons
-    Button(root, text="Encode Image", command=open_encode_menu, width=20).pack(pady=10)
-    Button(root, text="Decode Image", command=open_decode_menu, width=20).pack(pady=10)
-
-def clear_window():
+    # Clear the window
     for widget in root.winfo_children():
         widget.destroy()
 
-# Main Window Setup
-root = Tk()
+    # Add heading
+    heading_label = tk.Label(root, text="Steganography Tool", font=("Helvetica", 16, "bold"))
+    heading_label.pack(pady=20)
+
+    # Main menu buttons
+    encode_button = tk.Button(root, text="Encode Data into Image", command=show_encode_menu)
+    encode_button.pack(pady=10)
+
+    decode_button = tk.Button(root, text="Decode Data from Image", command=show_decode_menu)
+    decode_button.pack(pady=10)
+
+def show_encode_menu():
+    # Clear the window
+    for widget in root.winfo_children():
+        widget.destroy()
+
+    # Image selection
+    global image_label
+    image_label = tk.Label(root, text="No image selected", width=30, height=15)
+    image_label.pack(pady=10)
+
+    select_button = tk.Button(root, text="Select Image", command=select_image)
+    select_button.pack()
+
+    # Text entry for encoding
+    text_label = tk.Label(root, text="Enter text to encode:")
+    text_label.pack()
+
+    global text_entry
+    text_entry = tk.Entry(root, width=50)
+    text_entry.pack(pady=10)
+
+    # Encode button
+    encode_button = tk.Button(root, text="Encode", command=encode)
+    encode_button.pack(pady=5)
+
+    # Text file encoding button
+    encode_file_button = tk.Button(root, text="Encode Text File into Image", command=encode_text_file)
+    encode_file_button.pack(pady=10)
+
+    # Output label
+    global output_label
+    output_label = tk.Label(root, text="", wraplength=400)
+    output_label.pack(pady=10)
+
+    # Back button
+    back_button = tk.Button(root, text="Back to Main Menu", command=show_main_menu)
+    back_button.pack(pady=10)
+
+def show_decode_menu():
+    # Clear the window
+    for widget in root.winfo_children():
+        widget.destroy()
+
+    # Image selection
+    global image_label
+    image_label = tk.Label(root, text="No image selected", width=30, height=15)
+    image_label.pack(pady=10)
+
+    select_button = tk.Button(root, text="Select Image", command=select_image)
+    select_button.pack()
+
+    # Decode button
+    decode_button = tk.Button(root, text="Decode", command=decode)
+    decode_button.pack(pady=5)
+
+    # Output label
+    global output_label
+    output_label = tk.Label(root, text="", wraplength=400)
+    output_label.pack(pady=10)
+
+    # Decoded text box with scroll bar
+    global decoded_text_box
+    decoded_text_box = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=60, height=15, state=tk.DISABLED)
+    decoded_text_box.pack(pady=10)
+
+    # Back button
+    back_button = tk.Button(root, text="Back to Main Menu", command=show_main_menu)
+    back_button.pack(pady=10)
+
+# GUI setup
+root = tk.Tk()
+root.geometry("700x700")
 root.title("Steganography Tool")
 
-# Show the main menu on startup
+# Show the main menu
 show_main_menu()
 
-root.geometry("400x300")
+# Start the GUI event loop
 root.mainloop()
