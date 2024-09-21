@@ -2,5 +2,10 @@
 To use this tool in linux.
 ```bash
 git clone https://github.com/Vanshpandhare03/Steganography_Tool.git
+```
+```bash
 cd Steganography_Tool
+```
+```
 python3 Steganography_Tool.py
+```
