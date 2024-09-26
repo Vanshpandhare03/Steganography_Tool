@@ -175,13 +175,13 @@ def show_encode_menu():
     text_entry = tk.Entry(root, width=50)
     text_entry.pack(pady=10)
 
-    # Encode button
-    encode_button = tk.Button(root, text="Encode", command=encode)
-    encode_button.pack(pady=5)
-
     # Text file encoding button
     encode_file_button = tk.Button(root, text="Encode Text File into Image", command=encode_text_file)
     encode_file_button.pack(pady=10)
+
+    # Encode button
+    encode_button = tk.Button(root, text="Encode", command=encode)
+    encode_button.pack(pady=5)
 
     # Output label
     global output_label
